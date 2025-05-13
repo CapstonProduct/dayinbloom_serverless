@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template for existing API Gateway and Lambda functions
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Timeout: 30
+    Architectures: [x86_64]
+
+Resources:
+  # IAM Roles
+  AttachLogsToLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - lambda.amazonaws.com
+                - apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+
+  # Custom Domain
+  # BasePathMapping:
+  #   Type: AWS::ApiGateway::BasePathMapping
+  #   Properties:
+  #     DomainName: dayinbloom.shop
+  #     RestApiId: !Ref DayInBloomApi
+  #     Stage: prod
+  #     BasePath: ''  # '' means root (e.g., api.example.com/)
+  # 선택사항: Route53에서 도메인 자동 매핑
+  # CustomDomainRecord:
+  #   Type: AWS::Route53::RecordSet
+  #   Properties:
+  #     HostedZoneName: dayinbloom.shop.
+  #     Name: dayinbloom.shop.
+  #     Type: A
+  #     AliasTarget:
+  #       DNSName: !GetAtt CustomDomainName.RegionalDomainName
+  #       HostedZoneId: Z2FDTNDATAQYW2  # API Gateway 리전별 고정값 (REGIONAL)
+
+  # API Gateway
+  ApiGatewayLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/api-gateway/DayInBloomApi
+      RetentionInDays: 14
+  DayInBloomApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: dayinbloom-api
+      StageName: prod
+      EndpointConfiguration:
+        Type: REGIONAL
+      MethodSettings:
+        - LoggingLevel: INFO
+          DataTraceEnabled: true
+          ResourcePath: "/*"
+          HttpMethod: "*"
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayLogGroup.Arn
+        Format: $context.extendedRequestId $context.identity.sourceIp $context.identity.caller $context.identity.user [$context.requestTime] "$context.httpMethod $context.resourcePath $context.protocol" $context.status $context.responseLength $context.requestId
+      Cors:
+        AllowOrigin: "'*'"
+        AllowMethods: "'*'"
+
+  # Lambda Functions
+  AuthLoginCompleteLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: auth-login-complete
+      Description: 로그인 완료 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src/auth/login-complete
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /auth/login
+            Method: POST
+      Layers:
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
+  GetReportCommentLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get-report-comment
+      Description: 리포트의 의사/보호자 첨언 조회 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src/api/get-report-comment
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /users/{userId}/reports/{reportId}/comments
+            Method: get
+      Layers:
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
+  GetHealthReportLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get-health-report
+      Description: 건강 리포트 생성 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src/api/get-health-report
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /users/{userId}/reports
+            Method: get
+      Layers:
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
+  GetExerciseRecommendationsLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get-exercise-recommendations
+      Description: 운동 추천 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src/api/get-exercise-recommendations
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /users/{userId}/exercise-recommendations
+            Method: get
+      Layers:
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:openai-nodejs:2
+  SaveFCMDeviceTokenLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: save-fcm-device-token
+      Description: FCM 디바이스 토큰 저장 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./src/fcm/save-fcm-device-token
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /fcm/device-token
+            Method: put
+      Layers:
+        - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
+
+  # Layers
+  AxiosLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: axios
+      Description: Axios Layer reference
+      CompatibleRuntimes:
+        - nodejs18.x
+        - nodejs20.x
+        - nodejs22.x
+      CompatibleArchitectures:
+        - x86_64
+        - arm64
+      ContentUri: layers/axios-layer
+      RetentionPolicy: Retain
