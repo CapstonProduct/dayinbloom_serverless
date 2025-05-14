@@ -79,6 +79,24 @@ Resources:
         AllowMethods: "'*'"
 
   # Lambda Functions
+  AuthOAuthTokenLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: auth-oauth-authorize
+      Description: Fitbit API Access Token 저장하고 반환하는 함수
+      Role: !GetAtt AttachLogsToLambdaRole.Arn
+      Handler: index.handler
+      CodeUri: ./dist/auth/oauth
+      Events:
+        DayInBloomApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref DayInBloomApi
+            Path: /auth/oauth/token
+            Method: POST
+      Layers:
+        - !Ref DatabaseLayer
+        - !Ref AxiosLayer
   AuthLoginCompleteLambda:
     Type: AWS::Serverless::Function
     Properties:
@@ -180,4 +198,18 @@ Resources:
         - x86_64
         - arm64
       ContentUri: layers/axios-layer
+      RetentionPolicy: Retain
+  DatabaseLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: database-layer
+      Description: sequelize, mysql2, luxon
+      CompatibleRuntimes:
+        - nodejs18.x
+        - nodejs20.x
+        - nodejs22.x
+      CompatibleArchitectures:
+        - x86_64
+        - arm64
+      ContentUri: layers/database-layer
       RetentionPolicy: Retain
