@@ -127,8 +127,8 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref DayInBloomApi
-            Path: /users/{userId}/reports/{reportId}/comments
-            Method: get
+            Path: /report-comments
+            Method: post
       Layers:
         - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
   GetHealthReportLambda:
@@ -144,8 +144,8 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref DayInBloomApi
-            Path: /users/{userId}/reports
-            Method: get
+            Path: /reports
+            Method: post
       Layers:
         - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
   GetExerciseRecommendationsLambda:
@@ -161,8 +161,8 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref DayInBloomApi
-            Path: /users/{userId}/exercise-recommendations
-            Method: get
+            Path: /exercise-recommendations
+            Method: post
       Layers:
         - arn:aws:lambda:ap-northeast-2:767397900488:layer:mysql:3
         - arn:aws:lambda:ap-northeast-2:767397900488:layer:openai-nodejs:2
